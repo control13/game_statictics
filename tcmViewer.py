@@ -5,6 +5,7 @@ from matplotlib.widgets import Slider
 import cv2
 import pandas as pd
 from scipy.interpolate import CubicSpline
+import argparse
 
 
 img = cv2.imread("field.png")
@@ -29,7 +30,14 @@ yticks, ylabs = get_ticks(-3.7, 3.7, 9, 3700)
 plt.xticks(xticks, xlabs)
 plt.yticks(yticks, ylabs)
 
-df = pd.read_csv("/home/tobias/nao/tcm/GameController/bin/2023-07-06_18-03-41_B-HumanvsHTWK_1st.csv")  # TODO: argparse
+parser = argparse.ArgumentParser(
+                    prog='tcm Viewer',
+                    description='Shows robot positions')
+
+parser.add_argument('logfile')
+args = parser.parse_args()
+
+df = pd.read_csv(args.logfile)  # TODO: argparse
 # offside = https://www.youtube.com/live/VAHpvp0eZ4g?si=ox62htX6w8KTVQbD&t=26154
 
 players = [(df["Team"][i], df["Player"][i]) for i in range(len(df["Team"]))]

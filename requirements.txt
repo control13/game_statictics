@@ -14,3 +14,4 @@ pytz==2023.3.post1
 scipy==1.11.4
 six==1.16.0
 tzdata==2023.3
+pyqt5==5.15.10
