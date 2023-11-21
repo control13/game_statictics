@@ -7,7 +7,7 @@ import pandas as pd
 from scipy.interpolate import CubicSpline
 
 
-img = cv2.imread("../../field.png")
+img = cv2.imread("field.png")
 plt.imshow(img, extent=[-5200, 5200, -3700, 3700])
 ax = plt.gca()
 fig = plt.gcf()
