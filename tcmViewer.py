@@ -35,9 +35,10 @@ parser = argparse.ArgumentParser(
                     description='Shows robot positions')
 
 parser.add_argument('logfile')
+parser.add_argument('-s', '--swap', action='store_true')
 args = parser.parse_args()
 
-df = pd.read_csv(args.logfile)  # TODO: argparse
+df = pd.read_csv(args.logfile)
 # offside = https://www.youtube.com/live/VAHpvp0eZ4g?si=ox62htX6w8KTVQbD&t=26154
 
 players = [(df["Team"][i], df["Player"][i]) for i in range(len(df["Team"]))]
@@ -122,9 +123,11 @@ def update_plot(val):
     res = rastered_players[str(player)][int(round(current_time))]
     if res is not None:
       x, y = res
+      if args.swap:
+        x, y = -x, -y
       if player[0] == 13:
         color = 'b'
-        x, y = -x, -y  # TODO: automate this
+        x, y = -x, -y
       else:
         color = 'r'
       c = Circle((x, y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
