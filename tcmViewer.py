@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Patch
 from matplotlib.widgets import Slider
 import cv2
 import pandas as pd
 from scipy.interpolate import CubicSpline
 import argparse
+import yaml
 
 
 img = cv2.imread("field.png")
@@ -35,9 +36,12 @@ parser = argparse.ArgumentParser(
                     description='Shows robot positions')
 
 parser.add_argument('logfile')
+parser.add_argument('-tc1', '--teamcolor1')
+parser.add_argument('-tc2', '--teamcolor2')
+parser.add_argument('-s', '--swap', action='store_true')
 args = parser.parse_args()
 
-df = pd.read_csv(args.logfile)  # TODO: argparse
+df = pd.read_csv(args.logfile)
 # offside = https://www.youtube.com/live/VAHpvp0eZ4g?si=ox62htX6w8KTVQbD&t=26154
 
 players = [(df["Team"][i], df["Player"][i]) for i in range(len(df["Team"]))]
@@ -110,23 +114,50 @@ for player in players_unique:
   rastered_players[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
 
 
+teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique))])
+spl_teams = yaml.load(open('teams.yaml'), yaml.Loader)
+
+match_teams = []
+
+for team in teams_unique:
+  for spl_team in spl_teams:
+    if spl_team['number'] == team:
+      match_teams.append(spl_team)
+
+if args.teamcolor1:
+  match_teams[0]['fieldPlayerColors'][0] = args.teamcolor1
+
+if args.teamcolor2:
+  match_teams[1]['fieldPlayerColors'][0] = args.teamcolor2
+
+
+legend_el = []
+for team in match_teams:
+  legend_el.append(Patch(facecolor=team['fieldPlayerColors'][0],
+                         edgecolor='w',
+                         label=team['name']))
+
+ax.legend(handles = legend_el)
+
 circles = []
+
 def update_plot(val):
   global circles
   for c in circles:
     c.remove()
   circles = []
-  print(val)
   current_time = val
   for player in players_unique:
     res = rastered_players[str(player)][int(round(current_time))]
     if res is not None:
       x, y = res
-      if player[0] == 13:
-        color = 'b'
-        x, y = -x, -y  # TODO: automate this
+      if args.swap:
+        x, y = -x, -y
+      if player[0] == teams_unique[0]:
+        color = match_teams[0]['fieldPlayerColors'][0]
+        x, y = -x, -y
       else:
-        color = 'r'
+        color = match_teams[1]['fieldPlayerColors'][0]
       c = Circle((x, y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
       circles.append(c)
       ax.add_patch(c)
