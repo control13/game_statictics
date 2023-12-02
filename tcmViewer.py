@@ -36,6 +36,8 @@ parser = argparse.ArgumentParser(
                     description='Shows robot positions')
 
 parser.add_argument('logfile')
+parser.add_argument('-tc1', '--teamcolor1')
+parser.add_argument('-tc2', '--teamcolor2')
 parser.add_argument('-s', '--swap', action='store_true')
 args = parser.parse_args()
 
@@ -116,15 +118,24 @@ teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique
 spl_teams = yaml.load(open('teams.yaml'), yaml.Loader)
 
 match_teams = []
-legend_el = []
 
 for team in teams_unique:
   for spl_team in spl_teams:
     if spl_team['number'] == team:
       match_teams.append(spl_team)
-      legend_el.append(Patch(facecolor=spl_team['fieldPlayerColors'][0],
-                           edgecolor='w',
-                           label=spl_team['name']))
+
+if args.teamcolor1:
+  match_teams[0]['fieldPlayerColors'][0] = args.teamcolor1
+
+if args.teamcolor2:
+  match_teams[1]['fieldPlayerColors'][0] = args.teamcolor2
+
+
+legend_el = []
+for team in match_teams:
+  legend_el.append(Patch(facecolor=team['fieldPlayerColors'][0],
+                         edgecolor='w',
+                         label=team['name']))
 
 ax.legend(handles = legend_el)
 
@@ -135,7 +146,6 @@ def update_plot(val):
   for c in circles:
     c.remove()
   circles = []
-  print(val)
   current_time = val
   for player in players_unique:
     res = rastered_players[str(player)][int(round(current_time))]
