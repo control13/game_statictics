@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Patch
 from matplotlib.widgets import Slider
 import cv2
 import pandas as pd
@@ -114,12 +114,22 @@ for player in players_unique:
 
 teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique))])
 spl_teams = yaml.load(open('teams.yaml'), yaml.Loader)
-def teamByNumber(number):
-  for team in spl_teams:
-    if team['number'] == number:
-      return team
+
+match_teams = []
+legend_el = []
+
+for team in teams_unique:
+  for spl_team in spl_teams:
+    if spl_team['number'] == team:
+      match_teams.append(spl_team)
+      legend_el.append(Patch(facecolor=spl_team['fieldPlayerColors'][0],
+                           edgecolor='w',
+                           label=spl_team['name']))
+
+ax.legend(handles = legend_el)
 
 circles = []
+
 def update_plot(val):
   global circles
   for c in circles:
@@ -134,12 +144,10 @@ def update_plot(val):
       if args.swap:
         x, y = -x, -y
       if player[0] == teams_unique[0]:
-        team = teamByNumber(teams_unique[0])
-        color = team['fieldPlayerColors'][0]
+        color = match_teams[0]['fieldPlayerColors'][0]
         x, y = -x, -y
       else:
-        team = teamByNumber(teams_unique[1])
-        color = team['fieldPlayerColors'][0]
+        color = match_teams[1]['fieldPlayerColors'][0]
       c = Circle((x, y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
       circles.append(c)
       ax.add_patch(c)
