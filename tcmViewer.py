@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Circle, Patch
+from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider
 import cv2
 import pandas as pd
@@ -49,7 +50,7 @@ players_unique = np.unique(players, axis=0)
 
 player_coordinates = {}
 for player in players_unique:
-  player_coordinates[str(player)] = df.loc[(df["Team"] == player[0]) & (df["Player"] == player[1])][["Timestamp", "Pose X", "Pose Y", "Penalized"]].values
+  player_coordinates[str(player)] = df.loc[(df["Team"] == player[0]) & (df["Player"] == player[1])][["Timestamp", "Pose X", "Pose Y", "Pose A", "Ball X", "Ball Y", "Ball Age", "isFallen", "Penalized"]].values
 
 def bin_search_coordiante(player, timestamp, left_index, right_index):
   coordinates = player_coordinates[str(player)]
@@ -66,16 +67,22 @@ def bin_search_coordiante(player, timestamp, left_index, right_index):
 def generate_interpolation(players, player_coordinates):
   player_splines = {}
   for player in players:
-    timestamp = [t[0] for t in player_coordinates[str(player)]]
-    diffs = np.diff(timestamp)
+    timestamps = [t[0] for t in player_coordinates[str(player)]]
+    diffs = np.diff(timestamps)
     pos_zero = np.where(diffs == 0)
-    xs = [t[1] for t in player_coordinates[str(player)]]
-    ys = [t[2] for t in player_coordinates[str(player)]]
+    rob_xs = [t[1] for t in player_coordinates[str(player)]]
+    rob_ys = [t[2] for t in player_coordinates[str(player)]]
+    rob_as = [t[3] for t in player_coordinates[str(player)]]
+    ball_xs = [t[4] for t in player_coordinates[str(player)]]
+    ball_ys = [t[5] for t in player_coordinates[str(player)]]
     if len(pos_zero) > 0:
-      timestamp = np.delete(timestamp, pos_zero)
-      xs = np.delete(xs, pos_zero)
-      ys = np.delete(ys, pos_zero)
-    cs = CubicSpline(timestamp, np.c_[xs, ys])
+      timestamps = np.delete(timestamps, pos_zero)
+      rob_xs = np.delete(rob_xs, pos_zero)
+      rob_ys = np.delete(rob_ys, pos_zero)
+      rob_as = np.delete(rob_as, pos_zero)
+      ball_xs = np.delete(ball_xs, pos_zero)
+      ball_ys = np.delete(ball_ys, pos_zero)
+    cs = CubicSpline(timestamps, np.c_[rob_xs, rob_ys, rob_as, ball_xs, ball_ys])
     player_splines[str(player)] = cs
   return player_splines
 
@@ -86,32 +93,37 @@ player_splines = generate_interpolation(players_unique, player_coordinates)
 def interpolate(player, timestamp, player_splines):
   left, right = bin_search_coordiante(player, timestamp, 0, len(player_coordinates[str(player)]) - 1)
   if left == right:
-    return None  # TODO
+    return None, None  # TODO
   left_state = player_coordinates[str(player)][left]
   right_state = player_coordinates[str(player)][right]
   # check if player is penalized
   if left_state[3] == 'P' or right_state[3] == 'P':
-    return None
+    return None, None
   if timestamp < left_state[0] or timestamp > right_state[0]:
-    return None
+    return None, None
   if right_state[0] - left_state[0] < 3000:
-    return player_splines[str(player)](timestamp)
+    ball_age = left_state[6]
+    return player_splines[str(player)](timestamp), ball_age
   else:
-    return None
+    return None, None
 
 
 def rasterize(player, time_max, player_splines):
   time = 0
   coordinates = []
+  ball_ages = []
   while time < time_max:
-    coordinates.append(interpolate(player, time, player_splines))
+    positions, ball_age = interpolate(player, time, player_splines)
+    ball_ages.append(ball_age)
+    coordinates.append(positions)
     time += 1000
-  return coordinates
+  return coordinates, ball_ages
 
 
-rastered_players = {}
+rastered_positions = {}
+rastered_ball_age = {}
 for player in players_unique:
-  rastered_players[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
+  rastered_positions[str(player)], rastered_ball_age[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
 
 
 teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique))])
@@ -140,27 +152,44 @@ for team in match_teams:
 ax.legend(handles = legend_el)
 
 circles = []
+lines = []
 
 def update_plot(val):
   global circles
   for c in circles:
     c.remove()
   circles = []
+  global lines
+  for l in lines:
+    l.remove()
+  lines = []
   current_time = val
   for player in players_unique:
-    res = rastered_players[str(player)][int(round(current_time))]
-    if res is not None:
-      x, y = res
+    positions = rastered_positions[str(player)][int(round(current_time))]
+    ball_age = rastered_ball_age[str(player)][int(round(current_time))]
+    if positions is not None:
+      rob_x, rob_y, rob_a, ball_x, ball_y = positions
       if args.swap:
-        x, y = -x, -y
+        rob_x, rob_y = -rob_x, -rob_y
+        ball_x, ball_y = -ball_x, -ball_y
       if player[0] == teams_unique[0]:
         color = match_teams[0]['fieldPlayerColors'][0]
-        x, y = -x, -y
+        rob_x, rob_y = -rob_x, -rob_y
+        ball_x, ball_y = -ball_x, -ball_y
       else:
         color = match_teams[1]['fieldPlayerColors'][0]
-      c = Circle((x, y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
-      circles.append(c)
-      ax.add_patch(c)
+
+      if (ball_age < 3) and (ball_age > 0) and 4500 > ball_x > -4500 and 3500 > ball_y > -3500:
+        line = Line2D([ball_x, rob_x], [ball_y, rob_y], marker='o', color=color, alpha=1 - ball_age*0.3, linewidth=1, markersize=3)
+        lines.append(line)
+        ax.add_line(line)
+
+      rob_c = Circle((rob_x, rob_y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
+      circles.append(rob_c)
+      ax.add_patch(rob_c)
+
+
+
   fig.canvas.draw_idle()
 
 
