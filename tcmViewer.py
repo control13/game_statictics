@@ -6,6 +6,7 @@ import cv2
 import pandas as pd
 from scipy.interpolate import CubicSpline
 import argparse
+import yaml
 
 
 img = cv2.imread("field.png")
@@ -111,6 +112,13 @@ for player in players_unique:
   rastered_players[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
 
 
+teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique))])
+spl_teams = yaml.load(open('teams.yaml'), yaml.Loader)
+def teamByNumber(number):
+  for team in spl_teams:
+    if team['number'] == number:
+      return team
+
 circles = []
 def update_plot(val):
   global circles
@@ -125,11 +133,13 @@ def update_plot(val):
       x, y = res
       if args.swap:
         x, y = -x, -y
-      if player[0] == 13:
-        color = 'b'
+      if player[0] == teams_unique[0]:
+        team = teamByNumber(teams_unique[0])
+        color = team['fieldPlayerColors'][0]
         x, y = -x, -y
       else:
-        color = 'r'
+        team = teamByNumber(teams_unique[1])
+        color = team['fieldPlayerColors'][0]
       c = Circle((x, y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
       circles.append(c)
       ax.add_patch(c)
