@@ -64,9 +64,21 @@ def bin_search_coordiante(player, timestamp, left_index, right_index):
     return bin_search_coordiante(player, timestamp, left_index, middle_idx)
 
 
+def transform_coordinate(player_coordinates):
+  for coordinate in player_coordinates:
+    #Rotation
+    coordinate[4] = np.cos(coordinate[3])*coordinate[4] + -np.sin(coordinate[3])*coordinate[4]
+    coordinate[5] = np.sin(coordinate[3])*coordinate[5] + np.cos(coordinate[3])*coordinate[5]
+    #Translation
+    coordinate[4] = coordinate[4] + coordinate[1]
+    coordinate[5] = coordinate[5] + coordinate[2]
+  return player_coordinates
+
+
 def generate_interpolation(players, player_coordinates):
   player_splines = {}
   for player in players:
+    transform_coordinate(player_coordinates[str(player)])
     timestamps = [t[0] for t in player_coordinates[str(player)]]
     diffs = np.diff(timestamps)
     pos_zero = np.where(diffs == 0)
@@ -75,6 +87,7 @@ def generate_interpolation(players, player_coordinates):
     rob_as = [t[3] for t in player_coordinates[str(player)]]
     ball_xs = [t[4] for t in player_coordinates[str(player)]]
     ball_ys = [t[5] for t in player_coordinates[str(player)]]
+
     if len(pos_zero) > 0:
       timestamps = np.delete(timestamps, pos_zero)
       rob_xs = np.delete(rob_xs, pos_zero)
@@ -82,6 +95,7 @@ def generate_interpolation(players, player_coordinates):
       rob_as = np.delete(rob_as, pos_zero)
       ball_xs = np.delete(ball_xs, pos_zero)
       ball_ys = np.delete(ball_ys, pos_zero)
+
     cs = CubicSpline(timestamps, np.c_[rob_xs, rob_ys, rob_as, ball_xs, ball_ys])
     player_splines[str(player)] = cs
   return player_splines
@@ -179,8 +193,8 @@ def update_plot(val):
       else:
         color = match_teams[1]['fieldPlayerColors'][0]
 
-      if (ball_age < 3) and (ball_age > 0) and 4500 > ball_x > -4500 and 3500 > ball_y > -3500:
-        line = Line2D([ball_x, rob_x], [ball_y, rob_y], marker='o', color=color, alpha=1 - ball_age*0.3, linewidth=1, markersize=3)
+      if (ball_age < 10) and (ball_age > 0) and 4500 > ball_x > -4500 and 3500 > ball_y > -3500:
+        line = Line2D([ball_x, rob_x], [ball_y, rob_y], marker='o', color=color, alpha=1 - ball_age*0.1, linewidth=1, markersize=3)
         lines.append(line)
         ax.add_line(line)
 
