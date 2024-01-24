@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Circle, Patch
+from matplotlib.patches import Circle, Patch, Arrow
 from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider
 import cv2
@@ -96,8 +96,10 @@ def generate_interpolation(players, player_coordinates):
       ball_xs = np.delete(ball_xs, pos_zero)
       ball_ys = np.delete(ball_ys, pos_zero)
 
-    cs = CubicSpline(timestamps, np.c_[rob_xs, rob_ys, rob_as, ball_xs, ball_ys])
-    player_splines[str(player)] = cs
+    rob_pos_cs = CubicSpline(timestamps, np.c_[rob_xs, rob_ys])
+    rob_rot_cs = CubicSpline(timestamps, np.c_[rob_as])
+    ball_pos_cs = CubicSpline(timestamps, np.c_[ball_xs, ball_ys])
+    player_splines[str(player)] = [rob_pos_cs, rob_rot_cs, ball_pos_cs]
   return player_splines
 
 
@@ -107,37 +109,37 @@ player_splines = generate_interpolation(players_unique, player_coordinates)
 def interpolate(player, timestamp, player_splines):
   left, right = bin_search_coordiante(player, timestamp, 0, len(player_coordinates[str(player)]) - 1)
   if left == right:
-    return None, None  # TODO
+    return None # TODO
   left_state = player_coordinates[str(player)][left]
   right_state = player_coordinates[str(player)][right]
   # check if player is penalized
   if left_state[3] == 'P' or right_state[3] == 'P':
-    return None, None
+    return None
   if timestamp < left_state[0] or timestamp > right_state[0]:
-    return None, None
+    return None
   if right_state[0] - left_state[0] < 3000:
     ball_age = left_state[6]
-    return player_splines[str(player)](timestamp), ball_age
+    return [player_splines[str(player)][0](timestamp),
+            player_splines[str(player)][1](timestamp),
+            player_splines[str(player)][2](timestamp),
+            ball_age]
   else:
-    return None, None
+    return None
 
 
 def rasterize(player, time_max, player_splines):
   time = 0
-  coordinates = []
-  ball_ages = []
+  rastered_positions = []
   while time < time_max:
-    positions, ball_age = interpolate(player, time, player_splines)
-    ball_ages.append(ball_age)
-    coordinates.append(positions)
+    rastered_positions.append(interpolate(player, time, player_splines))
     time += 1000
-  return coordinates, ball_ages
+  return rastered_positions
 
 
 rastered_positions = {}
 rastered_ball_age = {}
 for player in players_unique:
-  rastered_positions[str(player)], rastered_ball_age[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
+  rastered_positions[str(player)] = rasterize(player, np.max(df["Timestamp"]), player_splines)
 
 
 teams_unique = np.unique([players_unique[x][0] for x in range(len(players_unique))])
@@ -180,26 +182,28 @@ def update_plot(val):
   current_time = val
   for player in players_unique:
     positions = rastered_positions[str(player)][int(round(current_time))]
-    ball_age = rastered_ball_age[str(player)][int(round(current_time))]
     if positions is not None:
-      rob_x, rob_y, rob_a, ball_x, ball_y = positions
+      rob_pos, rob_rot, ball_pos, ball_age = positions
       if args.swap:
-        rob_x, rob_y = -rob_x, -rob_y
-        ball_x, ball_y = -ball_x, -ball_y
+        rob_pos[0], rob_pos[1] = -rob_pos[0], -rob_pos[1]
+        ball_pos[0], ball_pos[1] = -ball_pos[0], -ball_pos[1]
       if player[0] == teams_unique[0]:
         color = match_teams[0]['fieldPlayerColors'][0]
-        rob_x, rob_y = -rob_x, -rob_y
-        ball_x, ball_y = -ball_x, -ball_y
+        rob_pos[0], rob_pos[1], rob_rot = -rob_pos[0], -rob_pos[1], rob_rot + np.pi
+        ball_pos[0], ball_pos[1] = -ball_pos[0], -ball_pos[1]
       else:
         color = match_teams[1]['fieldPlayerColors'][0]
 
-      if (ball_age < 10) and (ball_age > 0) and 4500 > ball_x > -4500 and 3500 > ball_y > -3500:
-        line = Line2D([ball_x, rob_x], [ball_y, rob_y], marker='o', color=color, alpha=1 - ball_age*0.1, linewidth=1, markersize=3)
+      if (ball_age < 5) and (ball_age > 0) and (4500 > ball_pos[0] > -4500) and (3500 > ball_pos[1] > -3500):
+        line = Line2D([ball_pos[0], rob_pos[0]], [ball_pos[1], rob_pos[1]], marker='o', color=color, alpha=1 - ball_age*0.2, linewidth=1, markersize=3)
         lines.append(line)
         ax.add_line(line)
 
-      rob_c = Circle((rob_x, rob_y), 150, linewidth=1, fill=True, edgecolor='w', facecolor=color)
+      rob_a = Arrow(rob_pos[0], rob_pos[1], (np.cos(rob_rot) * 300), (np.sin(rob_rot) * 300), width=400, linewidth=1, fill=True, edgecolor="k", facecolor=color)
+      rob_c = Circle((rob_pos[0], rob_pos[1]), 150, linewidth=1, fill=True, edgecolor="k", facecolor=color)
+      circles.append(rob_a)
       circles.append(rob_c)
+      ax.add_patch(rob_a)
       ax.add_patch(rob_c)
 
 
@@ -216,6 +220,14 @@ time_slider = Slider(
     valinit=1,
     valstep=1,
 )
+
+def on_press(event):
+  if event.key == 'right' and time_slider.val < time_slider.valmax-1:
+    time_slider.set_val(time_slider.val + 1)
+  if event.key == 'left' and time_slider.val > time_slider.valmin:
+    time_slider.set_val(time_slider.val - 1)
+
+fig.canvas.mpl_connect('key_press_event', on_press)
 
 time_slider.on_changed(update_plot)
 update_plot(1)
